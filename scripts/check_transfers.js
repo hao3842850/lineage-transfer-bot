@@ -5,10 +5,12 @@ const path = require('path');
 
 // ================= 設定區 =================
 const TARGET_URL = 'https://helper.lineagem.cc/id/'; // 目標網址
-// 設定你要監控的「目標伺服器」清單
+
+// 設定你要監控的「指定伺服器名單」（只要有玩家移入或移出這些伺服器，都會發送通知）
 const WATCH_SERVERS = ['伊娃']; 
+
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
-const HISTORY_FILE = path.join(__dirname, '../notified_history.json');
+const HISTORY_FILE = path.join(__dirname, '../data/notified_history.json');
 // ==========================================
 
 async function run() {
@@ -41,7 +43,7 @@ async function run() {
     // 等待表格資料載入
     await new Promise(r => setTimeout(r, 3000));
 
-    // 3. 解析表格內容 (對應截圖欄位：職業、玩家、伺服器、伺服器群組、prev_name、prev_server)
+    // 3. 解析表格內容 (職業、玩家、目標伺服器、伺服器群組、prev_name、prev_server)
     const transfers = await page.evaluate(() => {
         const rows = Array.from(document.querySelectorAll('table tbody tr'));
         return rows.map(row => {
@@ -51,9 +53,9 @@ async function run() {
                 job: cols[0],           // 職業
                 player: cols[1],        // 玩家名稱
                 targetServer: cols[2],  // 目標伺服器
-                serverGroup: cols[3],   // 伺服器群組 (如：五區)
+                serverGroup: cols[3],   // 伺服器群組
                 prevName: cols[4],      // prev_name
-                prevServer: cols[5]     // prev_server
+                prevServer: cols[5]     // prev_server (原伺服器)
             };
         }).filter(item => item !== null && item.player !== '');
     });
@@ -61,39 +63,58 @@ async function run() {
     await browser.close();
     console.log(`📊 共抓取到 ${transfers.length} 筆移民資料。`);
 
-    // 4. 過濾出符合監控伺服器且尚未通知過的新資料
+    // 4. 過濾出符合「移入」或「移出」指定伺服器且尚未通知過的新資料
     const newAlerts = [];
+    
     for (const item of transfers) {
-        // 產生唯一識別碼 (避免重複通知)
-        const recordKey = `${item.player}_${item.targetServer}_${item.prevServer}_${item.prevName}`;
+        // 檢查 A：是否為「移入」我們關注的伺服器
+        if (WATCH_SERVERS.includes(item.targetServer)) {
+            const recordKey = `IN_${item.player}_${item.targetServer}_${item.prevServer}`;
+            if (!notifiedHistory.includes(recordKey)) {
+                newAlerts.push({ ...item, alertType: 'IN', recordKey });
+                notifiedHistory.push(recordKey);
+            }
+        }
 
-        if (WATCH_SERVERS.includes(item.targetServer) && !notifiedHistory.includes(recordKey)) {
-            newAlerts.push({ ...item, recordKey });
-            notifiedHistory.push(recordKey);
+        // 檢查 B：是否為「移出/離開」我們關注的伺服器
+        if (WATCH_SERVERS.includes(item.prevServer)) {
+            const recordKey = `OUT_${item.player}_${item.targetServer}_${item.prevServer}`;
+            if (!notifiedHistory.includes(recordKey)) {
+                newAlerts.push({ ...item, alertType: 'OUT', recordKey });
+                notifiedHistory.push(recordKey);
+            }
         }
     }
 
     if (newAlerts.length === 0) {
-        console.log('✅ 目前沒有符合條件的新移民動態。');
+        console.log('✅ 目前沒有符合條件的新移民或離開動態。');
         return;
     }
 
-    console.log(`🚨 發現 ${newAlerts.length} 筆新移民動態！準備發送 Discord 通知...`);
+    console.log(`🚨 發現 ${newAlerts.length} 筆相關變動！準備發送 Discord 通知...`);
 
     // 5. 發送 Discord Embed 通知
     for (const alert of newAlerts) {
+        const isIncoming = alert.alertType === 'IN';
+        
+        // 移入用紅色警戒，移出/離開用藍色提示，讓你一眼看出方向
+        const embedColor = isIncoming ? 15158332 : 3447003; 
+        const titleText = isIncoming 
+            ? `🚨 【移入警報】有玩家搬家進入【${alert.targetServer}】`
+            : `⚠️ 【移出警報】有玩家離開【${alert.prevServer}】`;
+
         const embedPayload = {
             username: "天堂M 移民雷達",
             embeds: [
                 {
-                    title: `🚨 偵測到新移民進入【${alert.targetServer}】`,
-                    color: 15158332, // 紅色警戒框
+                    title: titleText,
+                    color: embedColor,
                     fields: [
                         { name: "玩家名稱", value: `**${alert.player}**`, inline: true },
                         { name: "職業", value: alert.job, inline: true },
-                        { name: "目標伺服器", value: `${alert.targetServer} (${alert.serverGroup})`, inline: true },
-                        { name: "原伺服器", value: alert.prevServer || "未知", inline: true },
-                        { name: "原角色名稱", value: alert.prevName || "無變更", inline: true }
+                        { name: "動向路徑", value: `\`${alert.prevServer}\` ➔ \`${alert.targetServer}\``, inline: false },
+                        { name: "原角色名稱", value: alert.prevName || "無變更", inline: true },
+                        { name: "目標群組", value: alert.serverGroup, inline: true }
                     ],
                     footer: { text: "天堂M 排行榜自動監控系統" },
                     timestamp: new Date().toISOString()
@@ -103,19 +124,23 @@ async function run() {
 
         try {
             await axios.post(DISCORD_WEBHOOK_URL, embedPayload);
-            console.log(`✉️ 已發送通知：${alert.player} -> ${alert.targetServer}`);
-            // 避免觸發 Discord API 速率限制 (Rate Limit)，每則間隔 1 秒
-            await new Promise(r => setTimeout(r, 1000));
+            console.log(`✉️ 已發送 (${alert.alertType}) 通知：${alert.player} (${alert.prevServer} -> ${alert.targetServer})`);
+            await new Promise(r => setTimeout(r, 1000)); // 避免觸發 Discord 頻率限制
         } catch (err) {
             console.error(`❌ 發送失敗 (${alert.player}):`, err.message);
         }
     }
 
-    // 6. 將最新的已通知清單寫回檔案
-    // 只保留最近 1000 筆紀錄，避免檔案無限膨脹
-    if (notifiedHistory.length > 1000) {
-        notifiedHistory = notifiedHistory.slice(-1000);
+    // 6. 將最新的已通知清單寫回檔案（自動確保 data 資料夾存在）
+    if (notifiedHistory.length > 1500) {
+        notifiedHistory = notifiedHistory.slice(-1500);
     }
+    
+    const dir = path.dirname(HISTORY_FILE);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+    
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(notifiedHistory, null, 2));
 }
 
