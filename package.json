@@ -1,0 +1,10 @@
+{
+  "name": "lineagem-transfer-notifier",
+  "version": "1.0.0",
+  "description": "天堂M 本週移民自動監控與 Discord 推播",
+  "main": "scripts/check_transfers.js",
+  "dependencies": {
+    "axios": "^1.7.0",
+    "puppeteer": "^23.0.0"
+  }
+}
