@@ -3,7 +3,7 @@ name: LineageM Transfer Monitor
 on:
   schedule:
     # 每 30 分鐘自動執行一次 (UTC時間，可依需求調整)
-    - cron: '*/30 * * * *'
+    - cron: '*/1 * * * *'
   workflow_dispatch: # 允許你在 GitHub 網頁上手動點擊按鈕立即測試執行
 
 permissions:
