@@ -8,7 +8,7 @@ const TARGET_URL = 'https://helper.lineagem.cc/id/'; // 目標網址
 // 設定你要監控的「目標伺服器」清單
 const WATCH_SERVERS = ['伊娃']; 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
-const HISTORY_FILE = path.join(__dirname, '../data/notified_history.json');
+const HISTORY_FILE = path.join(__dirname, '../notified_history.json');
 // ==========================================
 
 async function run() {
