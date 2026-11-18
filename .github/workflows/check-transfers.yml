@@ -1,1 +1,38 @@
+name: LineageM Transfer Monitor
 
+on:
+  schedule:
+    # 每 30 分鐘自動執行一次 (UTC時間，可依需求調整)
+    - cron: '*/30 * * * *'
+  workflow_dispatch: # 允許你在 GitHub 網頁上手動點擊按鈕立即測試執行
+
+permissions:
+  contents: write # 允許 Action 將已通知紀錄寫回 Repository
+
+jobs:
+  check-and-notify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. 取得專案程式碼
+        uses: actions/checkout@v4
+
+      - name: 2. 設定 Node.js 環境
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 3. 安裝依賴套件
+        run: npm install
+
+      - name: 4. 執行移民比對與 Discord 推播
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: node scripts/check_transfers.js
+
+      - name: 5. 儲存已通知紀錄回 GitHub (避免重複通知)
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add data/notified_history.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update notified transfer history" && git push)
