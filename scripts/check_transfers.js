@@ -104,7 +104,7 @@ async function run() {
         : '目前監控伺服器無人員移出紀錄';
 
     const dashboardPayload = {
-        username: "SkyNet 移民雷達",
+        username: "百大移民雷達",
         embeds: [
             {
                 title: "📡 本週移民監控狀態看板",
@@ -124,7 +124,7 @@ async function run() {
                 title: `⚠️ 移出總覽（共 ${outgoingList.length} 筆）`,
                 color: 15418782, // 洋紅色
                 description: outgoingText,
-                footer: { text: "Transfer Radar 狀態看板 • 自動原地更新" },
+                footer: { text: "Transfer Radar 狀態看板 • 自動原地更新" }, // 正確放在這裡才會顯示在最下方灰色小字
                 timestamp: new Date().toISOString()
             }
         ]
