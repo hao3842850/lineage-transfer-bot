@@ -5,7 +5,7 @@ const path = require('path');
 
 // ================= 設定區 =================
 const TARGET_URL = 'https://helper.lineagem.cc/id/';
-const WATCH_SERVERS = ['伊娃']; 
+const WATCH_SERVERS = ['伊娃','殷海薩']; 
 
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const DISCORD_MESSAGE_ID = process.env.DISCORD_MESSAGE_ID;
